@@ -1,22 +1,26 @@
 package com.back.Backend.service;
 
+import com.back.Backend.exceptions.FileNotFoundException;
+import com.back.Backend.exceptions.InvalidFileException;
 import com.back.Backend.model.File;
 import com.back.Backend.repository.FileRepository;
-import org.apache.commons.lang3.time.DateUtils;
-import org.apache.commons.io.FileUtils;
+import lombok.NoArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
 import java.text.ParseException;
-import java.util.Date;
-import java.util.stream.Stream;
+import java.text.SimpleDateFormat;
+import java.util.*;
+import java.util.stream.Collectors;
 
 
+@Service
+@NoArgsConstructor
 public class FileStorageServiceImpl implements FileStorageService {
 
     FileRepository fileRepository;
@@ -26,53 +30,113 @@ public class FileStorageServiceImpl implements FileStorageService {
         this.fileRepository = fileRepository;
     }
 
-    public FileStorageServiceImpl() throws FileNotFoundException {
-    }
 
     @Override
-    public void init() {
+    public List<File> getAllFiles(int page, int limit) {
+
+        Pageable pageable = PageRequest.of(page, limit);
+
+        List<File> content = fileRepository.findAll(pageable).getContent();
+
+        if (content.size() < 1) {
+            return new ArrayList<>();
+        }
+        return content;
+    }
+    @Override
+    public File getById(Long id) {
+
+       return fileRepository.findById(id).orElseThrow(()-> {
+           throw new FileNotFoundException("File not Found");
+        });
+
 
     }
 
-    @Override
-    public void save(MultipartFile file) {
-
-    }
 
     @Override
-    public void upLoad(MultipartFile file) throws IOException, ParseException {
+    public void uploadAndSave(MultipartFile file) throws IOException, ParseException {
+
+
+        List<File> files = new ArrayList<>();
 
         String data = new String(file.getBytes(), StandardCharsets.UTF_8);
-        String docType = data.substring(0, 1);
-        Integer companyId = Integer.parseInt(data.substring(1, 10));
-        Date date = DateUtils.parseDate(data.substring(10, 19), "yyyy/MM/dd");
-        Integer docId = Integer.parseInt(data.substring(19, 28));
-        String sign = data.substring(28, 29);
-        Integer amount = Integer.parseInt(data.substring(29, 39));
 
-        File fileEntity = File.builder().docType(docType)
-                .companyId(companyId)
-                .date(date)
-                .dockId(docId)
-                .sign(sign)
-                .amount(amount)
-                .build();
+        List<String> splitedList = Arrays.stream(data.split("\n"))
+                .map(String::trim)
+                .collect(Collectors.toList());
 
-        fileRepository.save(fileEntity);
+        String[] splitedStrings = splitedList.toArray(String[]::new);
 
 
+        Arrays.stream(splitedStrings).filter(line -> line.length() == 38)
+                .forEach(line -> {
+                    try {
+                        String docType = line.substring(0, 1);
+                        int companyId = Integer.parseInt(line.substring(1, 10));
+                        Date date = new SimpleDateFormat("yyyyMMdd", Locale.ENGLISH).parse(line.substring(10, 18));
+                        int docId = Integer.parseInt(line.substring(18, 27));
+                        String sign = line.substring(27, 28);
+                        int amount = Integer.parseInt(line.substring(28));
+                        File fileEntity = File.builder().docType(docType)
+                                .companyId(companyId)
+                                .date(date)
+                                .docId(docId)
+                                .sign(sign)
+                                .amount(amount)
+                                .build();
+                        files.add(fileEntity);
+
+
+                    } catch (InvalidFileException | ParseException e) {
+                        throw new InvalidFileException("Invalid File Exception");
+                    }
+                });
+
+
+         files.forEach(fileEntity -> fileRepository.save(fileEntity));
 
 
     }
 
 
     @Override
-    public void deleteAll() {
+    public void delete(Long id) {
+
+        fileRepository.findById(id).ifPresentOrElse(
+                fileToDelete -> {
+                    fileRepository.delete(fileToDelete);
+                },
+                () -> {
+                    throw new FileNotFoundException("File not found");
+                }
+        );
+
 
     }
 
     @Override
-    public Stream<Path> loadAll() {
-        return null;
+    public void update(File file, Long id) {
+
+        fileRepository.findById(id).ifPresentOrElse(presentFile -> {
+
+                presentFile.setDocType(file.getDocType());
+                presentFile.setCompanyId(file.getCompanyId());
+                presentFile.setDate(file.getDate());
+                presentFile.setDocId(file.getDocId());
+                presentFile.setSign(file.getSign());
+                presentFile.setAmount(file.getAmount());
+
+                fileRepository.save(file);
+
+                },
+                () -> {
+                    throw new FileNotFoundException("File not found");
+                });
+
+
     }
+
+
+
 }

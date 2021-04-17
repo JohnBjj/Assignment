@@ -5,12 +5,13 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.*;
 
+import javax.persistence.*;
 import javax.persistence.Entity;
-import javax.persistence.GeneratedValue;
-import javax.persistence.Id;
+import java.lang.annotation.Documented;
 import java.util.Date;
+import java.util.UUID;
 
 @Entity
 @Builder
@@ -21,16 +22,19 @@ public class File {
 
     @Id
     @GeneratedValue
+    @Column(updatable = false, nullable = false)
     private Long id;
+
+    @Version
+    int version;
 
     private String docType;
 
     private Integer companyId;
 
-    @CreationTimestamp
     private Date date;
 
-    private Integer dockId;
+    private Integer docId;
 
     private String sign;
 
